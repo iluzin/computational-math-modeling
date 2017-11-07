@@ -1,7 +1,11 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 from PyQt5 import QtCore, QtGui, QtWidgets
 import sys
+import xml.etree.ElementTree as ET
 
 class Application(QtWidgets.QApplication):
     def exec_(self):
@@ -10,25 +14,23 @@ class Application(QtWidgets.QApplication):
         window.show()
         return QtWidgets.QApplication.exec_()
 
-class Circle(object):
-    def __init__(self, x=0, y=0, radius=1, color=None):
-        self.x = x
-        self.y = y
-        self.radius = radius
-        self.color = color
+class Circle(dict):
+    def __init__(self, x=.0, y=.0, radius=1, color=None):
+        dict.__init__(self, x=x, y=y, radius=radius, color=color)
+        for key, value in self.iteritems():
+            exec 'self.{} = value'.format(key)
+        self.update(zip(self.keys(), map(Circle._str, self.values())))
     
-    def pos(self):
-        return self.x, self.y
-    
-    def x(self, x=None):
+    def pos(self, x=None, y=None):
         if not x is None:
             self.x = x
-        return self.x
-    
-    def y(self, y=None):
+            self['x'] = Circle._str(x)
         if not y is None:
             self.y = y
-        return self.y
+            self['y'] = Circle._str(y)
+        return self.x, self.y
+    
+    _str = staticmethod(lambda x: x.hex() if isinstance(x, float) else str(x))
 
 class Window(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
@@ -135,16 +137,16 @@ class Window(QtWidgets.QWidget):
         self.circles = []
     
     def minusButtonClickedEvent(self):
-        plt.xlim(plt.xlim()[0] * 1.5, plt.xlim()[1] * 1.5)
-        plt.ylim(plt.ylim()[0] * 1.5, plt.ylim()[1] * 1.5)
+        plt.xlim(plt.xlim()[0] * Window._zoom, plt.xlim()[1] * Window._zoom)
+        plt.ylim(plt.ylim()[0] * Window._zoom, plt.ylim()[1] * Window._zoom)
         self.canvas.draw()
     
     def mouseClickEvent(self, event):
         if not event.xdata is None and not event.ydata is None:
             circle = Circle(event.xdata, event.ydata, self.slider.value(), self.colorbox.currentText())
             plt.subplot().add_patch(plt.Circle(circle.pos(), radius=circle.radius, color=circle.color))
-            self.canvas.draw()
             self.circles.append(circle)
+            self.canvas.draw()
     
     def mouseMoveEvent(self, event):
         if event.xdata is None:
@@ -158,27 +160,64 @@ class Window(QtWidgets.QWidget):
     
     def openFileEvent(self):
         path = QtWidgets.QFileDialog.getOpenFileName(self, filter='*.xml')
+        if not path[0]:
+            return
+        tree = ET.parse(path[0])
+        root = tree.getroot()
+        frame = root.find('frame')
+        self.move(int(frame.get('x')), int(frame.get('y')))
+        self.resize(int(frame.get('width')), int(frame.get('height')))
+        plt.xlim(map(.0.fromhex, eval(frame.get('xlim'))))
+        plt.ylim(map(.0.fromhex, eval(frame.get('ylim'))))
+        self.sizeline.setText(frame.get('radius'))
+        self.sizeChangedEvent()
+        self.colorbox.setCurrentText(frame.get('color'))
+        del self.circles[:]
+        plt.subplot().clear()
+        for element in frame.findall('object'):
+            circle = Circle(radius=int(element.get('radius')), color=element.get('color'))
+            circle.pos(.0.fromhex(element.get('x')), .0.fromhex(element.get('y')))
+            plt.subplot().add_patch(plt.Circle(circle.pos(), radius=circle.radius, color=circle.color))
+            self.circles.append(circle)
+        self.canvas.draw()
         self.openfilepath.setText(path[0])
     
     def plusButtonClickedEvent(self):
-        plt.xlim(plt.xlim()[0] / 1.5, plt.xlim()[1] / 1.5)
-        plt.ylim(plt.ylim()[0] / 1.5, plt.ylim()[1] / 1.5)
+        plt.xlim(plt.xlim()[0] / Window._zoom, plt.xlim()[1] / Window._zoom)
+        plt.ylim(plt.ylim()[0] / Window._zoom, plt.ylim()[1] / Window._zoom)
         self.canvas.draw()
     
     def saveFileEvent(self):
         path = QtWidgets.QFileDialog.getSaveFileName(self, filter='*.xml')
+        if not path[0]:
+            return
+        root = ET.Element('data')
+        tree = ET.ElementTree(root)
+        frame = ET.SubElement(root, 'frame')
+        frame.set('x', str(self.x()))
+        frame.set('y', str(self.y()))
+        frame.set('width', str(self.width()))
+        frame.set('height', str(self.height()))
+        frame.set('xlim', str(map(Circle._str, plt.xlim())))
+        frame.set('ylim', str(map(Circle._str, plt.ylim())))
+        frame.set('radius', self.sizeline.text())
+        frame.set('color', self.colorbox.currentText())
+        for circle in self.circles:
+            ET.SubElement(frame, 'object', circle)
+        tree.write(path[0])
         self.savefilepath.setText(path[0])
     
     def sizeChangedEvent(self):
-        size = 1
         try:
             size = max(1, min(int(self.sizeline.text()), 100))
         except:
-            pass
+            size = self.slider.value()
         self.slider.setValue(size)
     
     def sliderChangeEvent(self):
         self.sizeline.setText(str(self.slider.value()))
+    
+    _zoom = 1.5
 
 if __name__ == '__main__':
     app = Application(sys.argv)

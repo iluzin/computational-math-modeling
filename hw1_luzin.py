@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -138,8 +139,8 @@ if __name__ == '__main__':
         print process(p1, p2, p3, q1, q2) or process(p1, p2, p3, q2, q3) or process(p1, p2, p3, q3, q1) or process(q1, q2, q3, p1, p2) or process(q1, q2, q3, p2, p3) or process(q1, q2, q3, p3, p1)
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        ax.add_collection3d(Poly3DCollection(item))
-        ax.set_xlim(-5, 5)
-        ax.set_ylim(-5, 5)
-        ax.set_zlim(-5, 5)
+        ax.add_collection3d(Poly3DCollection(item, facecolors=['yellow', 'blue']))
+        ax.set_xlim(min(p1[0], p2[0], p3[0], q1[0], q2[0], q3[0]), max(p1[0], p2[0], p3[0], q1[0], q2[0], q3[0]))
+        ax.set_ylim(min(p1[1], p2[1], p3[1], q1[1], q2[1], q3[1]), max(p1[1], p2[1], p3[1], q1[1], q2[1], q3[1]))
+        ax.set_zlim(min(p1[2], p2[2], p3[2], q1[2], q2[2], q3[2]), max(p1[2], p2[2], p3[2], q1[2], q2[2], q3[2]))
         plt.show()

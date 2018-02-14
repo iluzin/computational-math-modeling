@@ -51,7 +51,6 @@ def inv_threading(a, n_threads=multiprocessing.cpu_count()):
 
 if __name__ == '__main__':
     A = np.random.rand(3, 3)
-    
     print np.linalg.inv(A)
     
     t = time()
@@ -70,8 +69,8 @@ if __name__ == '__main__':
     print t
     
     setup(ext_modules=cythonize("task4.pyx"))
-    import task4
+    from task4 import *
     t = time()
-    #print inv_cython(A)
+    print inv_cython(A)
     t = time() - t
     print t

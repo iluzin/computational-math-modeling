@@ -3,8 +3,12 @@
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
+import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
+from scipy.integrate import odeint
+from solver import *
 import sys
+import time
 import xml.etree.ElementTree as ET
 
 class Application(QtWidgets.QApplication):
@@ -15,8 +19,8 @@ class Application(QtWidgets.QApplication):
         return QtWidgets.QApplication.exec_()
 
 class Circle(dict):
-    def __init__(self, x=.0, y=.0, radius=1, color=None):
-        dict.__init__(self, x=x, y=y, radius=radius, color=color)
+    def __init__(self, x=.0, y=.0, dxdt=.0, dydt=.0, mass=.1, radius=1, color=None):
+        dict.__init__(self, x=x, y=y, dxdt=dxdt, dydt=dydt, mass=mass, radius=radius, color=color)
         for key, value in self.iteritems():
             exec 'self.{} = value'.format(key)
         self.update(zip(self.keys(), map(Circle._str, self.values())))
@@ -120,16 +124,22 @@ class Window(QtWidgets.QWidget):
         vbox_model = QtWidgets.QVBoxLayout()
         tab_model.setLayout(vbox_model)
         button_scipy = QtWidgets.QRadioButton('scipy')
+        button_scipy.clicked.connect(self.scipyButtonClickedEvent)
         vbox_model.addWidget(button_scipy)
         button_verlet = QtWidgets.QRadioButton('verlet')
+        button_verlet.clicked.connect(self.verletButtonClickedEvent)
         vbox_model.addWidget(button_verlet)
         button_verlet_threading = QtWidgets.QRadioButton('verlet-threading')
+        button_verlet_threading.clicked.connect(self.verletThreadingButtonClickedEvent)
         vbox_model.addWidget(button_verlet_threading)
         button_verlet_multiprocessing = QtWidgets.QRadioButton('verlet-multiprocessing')
+        button_verlet_multiprocessing.clicked.connect(self.verletMultiprocessingButtonClickedEvent)
         vbox_model.addWidget(button_verlet_multiprocessing)
         button_verlet_cython = QtWidgets.QRadioButton('verlet-cython')
+        button_verlet_cython.clicked.connect(self.verletCythonButtonClickedEvent)
         vbox_model.addWidget(button_verlet_cython)
         button_verlet_opencl = QtWidgets.QRadioButton('verlet-opencl')
+        button_verlet_opencl.clicked.connect(self.verletOpenComputingLanguageButtonClickedEvent)
         vbox_model.addWidget(button_verlet_opencl)
         plt.axis('on')
         plt.xlim(-100, 100)
@@ -177,6 +187,12 @@ class Window(QtWidgets.QWidget):
         for element in frame.findall('object'):
             circle = Circle(radius=int(element.get('radius')), color=element.get('color'))
             circle.pos(.0.fromhex(element.get('x')), .0.fromhex(element.get('y')))
+            circle['dxdt'] = element.get('dxdt')
+            circle.dxdt = .0.fromhex(circle['dxdt'])
+            circle['dydt'] = element.get('dydt')
+            circle.dydt = .0.fromhex(circle['dydt'])
+            circle['mass'] = element.get('mass')
+            circle.mass = .0.fromhex(circle['mass'])
             plt.subplot().add_patch(plt.Circle(circle.pos(), radius=circle.radius, color=circle.color))
             self.circles.append(circle)
         self.canvas.draw()
@@ -207,6 +223,34 @@ class Window(QtWidgets.QWidget):
         tree.write(path[0])
         self.savefilepath.setText(path[0])
     
+    def scipyButtonClickedEvent(self):
+        def accelerations(p):
+            G = 6.67408e-11
+            dims = len(p) / len(self.circles)
+            out = np.zeros(len(p))
+            for i in xrange(len(self.circles)):
+                for j, circle in enumerate(self.circles):
+                    if i != j:
+                        shift = p[j * dims:(j + 1) * dims] - p[i * dims:(i + 1) * dims]
+                        out[i * dims:(i + 1) * dims] += G * circle.mass * shift / np.linalg.norm(shift) ** 3
+            return out
+        
+        def func(*args):
+            idx = len(args[0]) / 2
+            return np.concatenate((args[0][idx:], accelerations(args[0][:idx])))
+        
+        tau = 24 * 60 * 60
+        tspan = np.arange(365) * tau
+        x0 = [(circle.x, circle.y) for circle in self.circles]
+        y0 = np.concatenate(x0 + [(circle.dxdt, circle.dydt) for circle in self.circles])
+        sol = odeint(func, y0, tspan)
+        for i in xrange(tspan.shape[0]):
+            for j, circle in enumerate(self.circles):
+                x = sol[i, 2 * j]
+                y = sol[i, 2 * j + 1]
+                plt.subplot().add_patch(plt.Circle((x, y), radius=circle.radius, color=circle.color))
+        self.canvas.draw()
+    
     def sizeChangedEvent(self):
         try:
             size = max(1, min(int(self.sizeline.text()), 100))
@@ -216,6 +260,56 @@ class Window(QtWidgets.QWidget):
     
     def sliderChangeEvent(self):
         self.sizeline.setText(str(self.slider.value()))
+    
+    def verletButtonClickedEvent(self):
+        tau = 24 * 60 * 60
+        tspan = np.arange(365) * tau
+        method = Verlet(tspan=tspan)
+        sol = method(self.circles)
+        for bodies in sol:
+            for j, circle in enumerate(bodies):
+                plt.subplot().add_patch(plt.Circle(circle.pos(), radius=circle.radius, color=circle.color))
+        self.canvas.draw()
+    
+    def verletThreadingButtonClickedEvent(self):
+        tau = 24 * 60 * 60
+        tspan = np.arange(365) * tau
+        method = VerletThreading(tspan=tspan)
+        sol = method(self.circles)
+        for bodies in sol:
+            for j, circle in enumerate(bodies):
+                plt.subplot().add_patch(plt.Circle(circle.pos(), radius=circle.radius, color=circle.color))
+        self.canvas.draw()
+    
+    def verletMultiprocessingButtonClickedEvent(self):
+        tau = 24 * 60 * 60
+        tspan = np.arange(365) * tau
+        method = VerletMultiprocessing(tspan=tspan)
+        sol = method(self.circles)
+        for bodies in sol:
+            for j, circle in enumerate(bodies):
+                plt.subplot().add_patch(plt.Circle(circle.pos(), radius=circle.radius, color=circle.color))
+        self.canvas.draw()
+    
+    def verletCythonButtonClickedEvent(self):
+        tau = 24 * 60 * 60
+        tspan = np.arange(365) * tau
+        method = VerletCython(tspan=tspan)
+        sol = method(self.circles)
+        for bodies in sol:
+            for j, circle in enumerate(bodies):
+                plt.subplot().add_patch(plt.Circle(circle.pos(), radius=circle.radius, color=circle.color))
+        self.canvas.draw()
+    
+    def verletOpenComputingLanguageButtonClickedEvent(self):
+        tau = 24 * 60 * 60
+        tspan = np.arange(365) * tau
+        method = VerletOpenComputingLanguage(tspan=tspan)
+        sol = method(self.circles)
+        for bodies in sol:
+            for j, circle in enumerate(bodies):
+                plt.subplot().add_patch(plt.Circle(circle.pos(), radius=circle.radius, color=circle.color))
+        self.canvas.draw()
     
     _zoom = 1.5
 

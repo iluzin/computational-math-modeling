@@ -1,11 +1,11 @@
 import numpy as np
 cimport numpy as np
 
-def invert_matrix_cython(np.ndarray a):
-    cdef np.ndarray out = np.zeros(a.shape)
+def inv_cython(np.ndarray a):
+    cdef float det = np.linalg.det(a)
+    cdef np.ndarray out = np.zeros((a.shape[0], a.shape[1]))
     for i in range(a.shape[0]):
         for j in range(a.shape[1]):
-            M = np.delete(a, i, 0)
-            M = np.delete(M, j, 1)
-            out[j, i] = np.linalg.det(M)
-    return out / np.linalg.det(a)
+            M = np.delete(np.delete(a, i, 0), j, 1)
+            out[j, i] = np.linalg.det(M) / det
+    return out

@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import numpy as np
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
@@ -24,7 +27,7 @@ def process(a, b, c, p, q):
             res |= area(a, b, p) + area(b, c, p) + area(c, a, p) - area(a, b, c) < EPS
             res |= intersect(a, b, p, q) or intersect(b, c, p, q) or intersect(c, a, p, q)
     else:
-        mu = (coef.dot(p) + intercept) / coef.dot(p - q)
+        mu = float(coef.dot(p) + intercept) / coef.dot(p - q)
         if -EPS < mu and mu < 1 + EPS:
             m = p + mu * (q - p)
             res |= area(a, b, m) + area(b, c, m) + area(c, a, m) - area(a, b, c) < EPS

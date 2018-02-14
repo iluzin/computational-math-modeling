@@ -4,7 +4,9 @@
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
+from matplotlib import cm
 import numpy as np
+import pywavefront
 import sys
 
 def create_shader(shader_type, source):
@@ -28,8 +30,13 @@ def display():
     center = eye + (np.cos(lat) * np.sin(lon), np.sin(lat), np.cos(lat) * np.cos(lon))
     up = -np.sin(lat) * np.sin(lon), np.cos(lat), -np.sin(lat) * np.cos(lon)
     gluLookAt(eye[0], eye[1], eye[2], center[0], center[1], center[2], up[0], up[1], up[2])
+    glUseProgram(terrain)
+    glTranslate(0, -32, -32)
+    global meshes
+    meshes.draw()
+    glUseProgram(program)
     glScale(8, 8, 8)
-    glTranslate(0, -0.25, -4)
+    glTranslate(0, 4, 0)
     glEnableClientState(GL_VERTEX_ARRAY)
     glEnableClientState(GL_NORMAL_ARRAY)
     glEnableClientState(GL_COLOR_ARRAY)
@@ -89,7 +96,7 @@ if __name__ == '__main__':
     height = glutGet(GLUT_SCREEN_HEIGHT)
     width = glutGet(GLUT_SCREEN_WIDTH)
     glutWarpPointer(width / 2, height / 2)
-    glClearColor(0.2, 0.2, 0.2, 1)
+    glClearColor(0.8, 0.8, 1, 1)
     glEnable(GL_DEPTH_TEST)
     glEnable(GL_MULTISAMPLE)
     vertex = create_shader(GL_VERTEX_SHADER, """
@@ -112,18 +119,51 @@ if __name__ == '__main__':
         void main() {
             vec3 L = normalize(-v);
             vec3 R = normalize(-reflect(L, N));
-            vec4 Idiff = vertex_color * max(dot(N, L), 0.0);
-            vec4 Ispec = vec4(0.7, 0.7, 0.0, 1.0) * pow(max(dot(R, L), 0.0), 30.0);
-            //Ispec = specColor * pow ( max ( dot ( n2, h2 ), 0.0 ), specPower );
+            vec4 Idiff = vertex_color * max(dot(N, L), 0.);
+            vec4 Ispec = vec4(0.7, 0.7, 0, 1) * pow(max(dot(R, L), 0.), 30.);
             gl_FragColor = Idiff + Ispec;
-            //gl_FragColor = vertex_color;
         }
         """)
+    global program
     program = glCreateProgram()
     glAttachShader(program, vertex)
     glAttachShader(program, fragment)
     glLinkProgram(program)
-    glUseProgram(program)
+    global terrain
+    terrain = glCreateProgram()
+    glAttachShader(terrain, create_shader(GL_VERTEX_SHADER, """
+        varying vec3 N;
+        varying vec3 v;
+        varying vec4 vertex_color;
+        
+        vec3 terrain(float y) {
+            if (y < 0.15) {
+                float alpha = y / 0.15;
+                return vec3(0.2, 0.2, 0.6) * (1. - alpha) + vec3(0, 0.6, 1) * alpha;
+            } else if (y < 0.25) {
+                float alpha = (y - 0.15) / 0.10;
+                return vec3(0, 0.6, 1) * (1. - alpha) + vec3(0, 0.8, 0.4) * alpha;
+            } else if (y < 0.50) {
+                float alpha = (y - 0.25) / 0.25;
+                return vec3(0, 0.8, 0.4) * (1. - alpha) + vec3(1, 1, 0.6) * alpha;
+            } else if (y < 0.75) {
+                float alpha = (y - 0.50) / 0.25;
+                return vec3(1, 1, 0.6) * (1. - alpha) + vec3(0.5, 0.36, 0.33) * alpha;
+            } else {
+                float alpha = (y - 0.75) / 0.25;
+                return vec3(0.5, 0.36, 0.33) * (1. - alpha) + vec3(1, 1, 1) * alpha;
+            }
+        }
+        
+        void main() {
+            v = vec3(gl_ModelViewMatrix * gl_Vertex);
+            N = normalize(gl_NormalMatrix * gl_Normal);
+            gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+            vertex_color = vec4(terrain(0.06 * gl_Vertex.y - 0.33), 1);
+        }
+        """))
+    glAttachShader(terrain, fragment)
+    glLinkProgram(terrain)
     pointdata = [[-0.5, 0, 0.5], [0.5, 0, 0.5], [0.5, 0, -0.5],
                  [0.5, 0, -0.5], [-0.5, 0, -0.5], [-0.5, 0, 0.5],
                  [-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [0.5, -0.5, -0.5],
@@ -160,6 +200,8 @@ if __name__ == '__main__':
                [1, 0, 0], [1, 0, 0], [1, 0, 0],
                [-1, 0, 0], [-1, 0, 0], [-1, 0, 0],
                [-1, 0, 0], [-1, 0, 0], [-1, 0, 0]]
+    global meshes
+    meshes = pywavefront.Wavefront('2SkKFl4GjIr_0RLLmJXXGY5_obj/earth_terrain.obj')
     global eye
     eye = np.zeros(3)
     global lat
